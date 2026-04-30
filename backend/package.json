@@ -1,0 +1,22 @@
+{
+  "name": "travel-aggregator-api",
+  "version": "1.0.0",
+  "description": "Simple travel aggregation backend API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "seed": "node seed-mongo.js",
+    "seed:reset": "node seed-mongo.js --reset"
+  },
+  "keywords": ["travel", "api", "express"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongodb": "^6.3.0",
+    "ioredis": "^5.3.2",
+    "neo4j-driver": "^5.15.0",
+    "dotenv": "^16.3.1"
+  }
+}

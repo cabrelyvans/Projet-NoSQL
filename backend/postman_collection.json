@@ -1,0 +1,187 @@
+{
+  "info": {
+    "name": "Travel Aggregator API",
+    "description": "Local test collection for the Travel Aggregator API (Express + MongoDB + Redis + Neo4j).\n\nBefore use:\n1. Start the stack (`docker compose up`) or run `npm start` with DBs running.\n2. The `baseUrl` variable defaults to `http://localhost:3000` — change it under the collection's Variables tab if needed.\n3. Run \"Create Offer\" first; its test script saves the new offer's id into the `offerId` variable, which is then used by \"Get Offer by ID\".",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "offerId",
+      "value": "",
+      "type": "string",
+      "description": "Auto-populated by the \"Create Offer\" request's test script."
+    },
+    {
+      "key": "sessionToken",
+      "value": "",
+      "type": "string",
+      "description": "Auto-populated by the \"Login\" request's test script."
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        },
+        "description": "Returns `{ status: 'ok' }` if the server is up. Does NOT verify DB connectivity."
+      }
+    },
+    {
+      "name": "Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test(\"Response has token\", () => pm.expect(body).to.have.property('token'));",
+              "if (body.token) {",
+              "  pm.collectionVariables.set('sessionToken', body.token);",
+              "  console.log('Saved sessionToken:', body.token);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"u42\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["login"]
+        },
+        "description": "Creates a session token (UUID) stored in Redis with a 900s TTL.\nThe test script saves the token into `{{sessionToken}}`."
+      }
+    },
+    {
+      "name": "Create Offer",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 201\", () => pm.response.to.have.status(201));",
+              "const body = pm.response.json();",
+              "pm.test(\"Response has id\", () => pm.expect(body).to.have.property('id'));",
+              "if (body.id) {",
+              "  pm.collectionVariables.set('offerId', body.id);",
+              "  console.log('Saved offerId:', body.id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"from\": \"PAR\",\n  \"to\": \"LON\",\n  \"departDate\": \"2026-05-01\",\n  \"returnDate\": \"2026-05-07\",\n  \"provider\": \"AirFrance\",\n  \"price\": 250,\n  \"currency\": \"EUR\",\n  \"legs\": [],\n  \"hotel\": null,\n  \"activity\": null\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/offers",
+          "host": ["{{baseUrl}}"],
+          "path": ["offers"]
+        },
+        "description": "Inserts a new offer into MongoDB and publishes it on the Redis `offers:new` channel.\nThe test script saves the new id into `{{offerId}}` for use by \"Get Offer by ID\"."
+      }
+    },
+    {
+      "name": "Search Offers",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/offers?from=PAR&to=LON&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["offers"],
+          "query": [
+            { "key": "from", "value": "PAR" },
+            { "key": "to", "value": "LON" },
+            { "key": "limit", "value": "10" }
+          ]
+        },
+        "description": "Searches offers between two city codes. First call hits MongoDB; second call within 60s comes from the Redis cache (`source: \"cache\"`)."
+      }
+    },
+    {
+      "name": "Get Offer by ID",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/offers/{{offerId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["offers", "{{offerId}}"]
+        },
+        "description": "Fetches a single offer plus 3 related offers from cities NEAR the destination (Neo4j).\nRequires `{{offerId}}` — run \"Create Offer\" first.\nResults cached in Redis for 300s."
+      }
+    },
+    {
+      "name": "Get Recommendations",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/reco?city=PAR&k=3",
+          "host": ["{{baseUrl}}"],
+          "path": ["reco"],
+          "query": [
+            { "key": "city", "value": "PAR" },
+            { "key": "k", "value": "3" }
+          ]
+        },
+        "description": "Returns the top-`k` cities NEAR the given city, ordered by weight, from Neo4j. Requires the seed data (LON/BRU/AMS for PAR)."
+      }
+    },
+    {
+      "name": "Search Offers - Missing Params (400)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/offers",
+          "host": ["{{baseUrl}}"],
+          "path": ["offers"]
+        },
+        "description": "Negative test: `from` and `to` are required, expect 400."
+      }
+    },
+    {
+      "name": "Get Offer - Invalid ID (400)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/offers/not-a-valid-id",
+          "host": ["{{baseUrl}}"],
+          "path": ["offers", "not-a-valid-id"]
+        },
+        "description": "Negative test: invalid ObjectId, expect 400."
+      }
+    }
+  ]
+}
